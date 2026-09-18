@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#1b2a2e"/>
+  <rect x="96" y="128" width="320" height="220" rx="24" fill="#f2efe6" transform="rotate(-6 256 238)"/>
+  <rect x="96" y="150" width="320" height="220" rx="24" fill="#d4a24c"/>
+  <text x="256" y="292" font-family="Helvetica, Arial, sans-serif" font-size="108" font-weight="700"
+        text-anchor="middle" fill="#1b2a2e">NL</text>
+</svg>

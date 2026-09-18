@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1b2a2e">
+<title>NL ⇄ FR — cartes de vocabulaire</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🇳🇱</text></svg>">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ============ Écran de chargement ============ -->
+<div id="boot" class="boot">Chargement…</div>
+
+<!-- ============ Connexion / inscription ============ -->
+<div id="auth" class="auth" hidden>
+  <div class="auth-card">
+    <h1 class="auth-title">NL ⇄ FR</h1>
+    <p class="auth-sub">Cartes de vocabulaire néerlandais-français.</p>
+
+    <div class="seg">
+      <button type="button" class="seg-btn active" data-mode="login">Se connecter</button>
+      <button type="button" class="seg-btn" data-mode="signup">Créer un compte</button>
+    </div>
+
+    <label class="field" id="field-name" hidden>
+      <span>Prénom</span>
+      <input type="text" id="auth-name" autocomplete="given-name" placeholder="Camille">
+    </label>
+
+    <label class="field">
+      <span>E-mail</span>
+      <input type="email" id="auth-email" autocomplete="email" placeholder="vous@exemple.be">
+    </label>
+
+    <label class="field">
+      <span>Mot de passe</span>
+      <input type="password" id="auth-password" autocomplete="current-password" placeholder="6 caractères minimum">
+    </label>
+
+    <p class="auth-error" id="auth-error" hidden></p>
+
+    <button class="btn btn-primary btn-block" id="auth-submit">Se connecter</button>
+  </div>
+</div>
+
+<!-- ============ Application ============ -->
+<div id="app" class="app" hidden>
+
+  <header class="top">
+    <button class="deck-picker" id="deck-picker">
+      <span class="deck-name" id="deck-name">—</span>
+      <span class="deck-meta" id="deck-meta"></span>
+    </button>
+    <div class="top-right">
+      <span class="stat" id="stat-remaining"></span>
+      <button class="avatar" id="btn-account" title="Mon compte"></button>
+    </div>
+  </header>
+
+  <main>
+
+    <!-- ---- Cartes ---- -->
+    <section id="screen-cards" class="screen active">
+      <div class="card-stage" id="card-stage"></div>
+      <div class="cards-actions">
+        <button class="btn btn-skip" id="btn-skip">↩ Plus tard</button>
+        <button class="btn btn-delete" id="btn-delete" title="Retirer ce mot de la liste">🗑</button>
+        <button class="btn btn-know" id="btn-know">♥ Connu</button>
+      </div>
+    </section>
+
+    <!-- ---- Mots ---- -->
+    <section id="screen-words" class="screen">
+      <div class="row-tools">
+        <input type="search" id="search" placeholder="Rechercher un mot…">
+        <button class="icon-btn" id="btn-import">Importer</button>
+        <button class="icon-btn" id="btn-export">Exporter</button>
+      </div>
+      <div class="row-add">
+        <input type="text" id="new-nl" placeholder="Mot néerlandais">
+        <input type="text" id="new-fr" placeholder="Traduction française">
+        <button class="icon-btn" id="btn-add">Ajouter</button>
+      </div>
+      <input type="file" id="file-input" accept=".csv,text/csv" hidden>
+      <p class="hint-line">Touchez un mot pour le corriger · ✕ pour le retirer de la liste</p>
+      <div class="scroll-list" id="word-list"></div>
+      <div class="foot-line">
+        <span id="count-total"></span>
+        <button class="link-btn" id="btn-reset-progress">Tout remettre à revoir</button>
+        <span id="count-known"></span>
+      </div>
+    </section>
+
+    <!-- ---- Listes ---- -->
+    <section id="screen-decks" class="screen">
+      <div class="scroll-list" id="deck-list"></div>
+
+      <div class="panel">
+        <h2 class="panel-title">Nouvelle liste</h2>
+        <input type="text" id="new-deck-name" placeholder="Nom de la liste (ex. Verbes irréguliers)">
+        <div class="choice" id="deck-kind">
+          <button type="button" class="choice-btn active" data-shared="false">
+            <strong>Personnelle</strong>
+            <em>Vous seul y avez accès</em>
+          </button>
+          <button type="button" class="choice-btn" data-shared="true">
+            <strong>Commune</strong>
+            <em>Vous invitez d'autres personnes</em>
+          </button>
+        </div>
+        <button class="btn btn-primary btn-block" id="btn-create-deck">Créer la liste</button>
+        <p class="note">Sur une liste commune, chacun voit les mêmes mots mais garde sa propre progression.</p>
+      </div>
+    </section>
+
+  </main>
+
+  <nav class="tabs">
+    <button class="active" data-screen="screen-cards">Cartes</button>
+    <button data-screen="screen-words">Mots</button>
+    <button data-screen="screen-decks">Listes</button>
+  </nav>
+</div>
+
+<!-- ============ Fenêtres ============ -->
+<div class="sheet" id="sheet" hidden>
+  <div class="sheet-card">
+    <div class="sheet-head">
+      <h2 id="sheet-title"></h2>
+      <button class="sheet-close" id="sheet-close">✕</button>
+    </div>
+    <div class="sheet-body" id="sheet-body"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
