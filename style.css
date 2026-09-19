@@ -31,6 +31,14 @@ html, body {
 
 button, input { font-family: inherit; }
 
+/* Plusieurs éléments (.boot, .auth, .app, .sheet…) fixent leur propre
+   "display" en CSS pour se positionner. Sans cette règle, ce display
+   l'emporte sur l'attribut HTML "hidden" censé les masquer, et ils
+   restent visibles en permanence même une fois "hidden" activé en
+   JavaScript. Cette ligne garantit que "hidden" est toujours respecté,
+   quel que soit l'élément concerné. */
+[hidden] { display: none !important; }
+
 :focus-visible { outline: 2px solid var(--ochre); outline-offset: 2px; }
 
 @media (prefers-reduced-motion: reduce) {
