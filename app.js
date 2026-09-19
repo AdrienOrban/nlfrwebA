@@ -1,8 +1,23 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
-import { SUPABASE_URL, SUPABASE_KEY } from "./config.js";
+import { SUPABASE_URL, SUPABASE_KEY, APP_SALT } from "./config.js";
 
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// Client à part, qui ne touche jamais à la session en cours : utilisé
+// uniquement par l'administrateur pour créer de nouveaux accès sans se
+// faire déconnecter lui-même au passage.
+const sbScratch = createClient(SUPABASE_URL, SUPABASE_KEY, {
+  auth: { persistSession: false, autoRefreshToken: false, storageKey: "nlfr-scratch" }
+});
+
 const $ = (id) => document.getElementById(id);
+const EMAIL_DOMAIN = "@nlfr-app.local";
+
+// Le nom d'utilisateur EST l'accès : pas de mot de passe séparé à
+// retenir. On fabrique un identifiant technique déterministe pour
+// Supabase Auth à partir du nom choisi par l'administrateur.
+function usernameToEmail(u) { return slugify(u) + EMAIL_DOMAIN; }
+function usernameToPassword(u) { return APP_SALT + ":" + slugify(u); }
 
 const LAST_DECK_KEY = "nlfr_last_deck";
 const REVIEW_EVERY = 5;
@@ -56,70 +71,71 @@ function shuffle(a) {
   return r;
 }
 
-/* ===================== Connexion ===================== */
-
-let authMode = "login";
-
-document.querySelectorAll(".seg-btn").forEach((b) => {
-  b.onclick = () => {
-    authMode = b.dataset.mode;
-    document.querySelectorAll(".seg-btn").forEach((x) => x.classList.toggle("active", x === b));
-    $("field-name").hidden = authMode !== "signup";
-    $("auth-submit").textContent = authMode === "signup" ? "Créer mon compte" : "Se connecter";
-    $("auth-password").autocomplete = authMode === "signup" ? "new-password" : "current-password";
-    $("auth-error").hidden = true;
-  };
-});
+/* ===================== Accès ===================== */
 
 function authError(msg) {
   const el = $("auth-error");
   el.textContent = msg;
   el.hidden = false;
 }
+function authClear() {
+  $("auth-error").hidden = true;
+  $("auth-bootstrap").hidden = true;
+}
 
 async function submitAuth() {
-  const email = $("auth-email").value.trim();
-  const password = $("auth-password").value;
-  const name = $("auth-name").value.trim();
-  if (!email || !password) return authError("Renseignez votre e-mail et votre mot de passe.");
-  if (authMode === "signup" && !name) return authError("Indiquez le prénom qui s'affichera dans l'application.");
+  const username = $("auth-username").value.trim();
+  authClear();
+  if (!username) return authError("Entrez un nom d'utilisateur.");
 
   const btn = $("auth-submit");
   btn.disabled = true;
   btn.textContent = "Un instant…";
 
-  let error = null;
-  if (authMode === "signup") {
-    const res = await sb.auth.signUp({
-      email, password, options: { data: { display_name: name } }
-    });
-    error = res.error;
-    if (!error && !res.data.session) {
-      btn.disabled = false;
-      btn.textContent = "Créer mon compte";
-      return authError("Compte créé. Ouvrez l'e-mail de confirmation, puis revenez vous connecter.");
+  const email = usernameToEmail(username);
+  const password = usernameToPassword(username);
+
+  let { error } = await sb.auth.signInWithPassword({ email, password });
+
+  if (error) {
+    // Le nom d'utilisateur n'existe pas encore. Si la base est neuve
+    // (aucun compte du tout), on propose de créer le tout premier accès,
+    // qui devient administrateur automatiquement.
+    const { data: needsBootstrap } = await sb.rpc("is_bootstrap_needed");
+    if (needsBootstrap) {
+      const res = await sb.auth.signUp({
+        email, password, options: { data: { display_name: username } }
+      });
+      if (!res.error) {
+        btn.disabled = false;
+        btn.textContent = "Accéder";
+        return start();
+      }
+      error = res.error;
     }
-  } else {
-    const res = await sb.auth.signInWithPassword({ email, password });
-    error = res.error;
   }
 
   btn.disabled = false;
-  btn.textContent = authMode === "signup" ? "Créer mon compte" : "Se connecter";
+  btn.textContent = "Accéder";
 
   if (error) {
     const m = (error.message || "").toLowerCase();
-    if (m.includes("invalid login")) return authError("E-mail ou mot de passe incorrect.");
-    if (m.includes("already registered")) return authError("Un compte existe déjà avec cet e-mail. Connectez-vous.");
-    if (m.includes("password")) return authError("Le mot de passe doit faire au moins 6 caractères.");
+    if (m.includes("invalid login") || m.includes("invalid")) {
+      return authError("Ce nom d'utilisateur n'a pas d'accès. Demandez à l'administrateur de vous en créer un.");
+    }
     return authError(error.message);
   }
   await start();
 }
 
 $("auth-submit").onclick = submitAuth;
-["auth-email", "auth-password", "auth-name"].forEach((id) => {
-  $(id).addEventListener("keydown", (e) => { if (e.key === "Enter") submitAuth(); });
+$("auth-username").addEventListener("keydown", (e) => { if (e.key === "Enter") submitAuth(); });
+$("auth-username").addEventListener("input", authClear);
+
+// Sur une base toute neuve, on prévient tout de suite plutôt que
+// d'attendre un premier essai raté.
+sb.rpc("is_bootstrap_needed").then(({ data }) => {
+  if (data) $("auth-bootstrap").hidden = false;
 });
 
 /* ===================== Données ===================== */
@@ -128,7 +144,12 @@ async function loadProfile() {
   const { data: { user } } = await sb.auth.getUser();
   if (!user) return null;
   const { data } = await sb.from("profiles").select("*").eq("id", user.id).single();
-  return { id: user.id, email: user.email, display_name: data?.display_name || user.email.split("@")[0] };
+  return {
+    id: user.id,
+    email: user.email,
+    display_name: data?.display_name || user.email.split("@")[0],
+    is_admin: !!data?.is_admin
+  };
 }
 
 async function loadDecks() {
@@ -745,7 +766,7 @@ async function openDeckSheet(d) {
       const a = document.createElement("div"); a.className = "t1";
       a.textContent = m.display_name + (m.user_id === me.id ? " (vous)" : "");
       const b = document.createElement("div"); b.className = "t2";
-      b.textContent = m.role === "owner" ? "Propriétaire" : m.email;
+      b.textContent = m.role === "owner" ? "Propriétaire" : "A accès à cette liste";
       t.append(a, b);
       row.appendChild(t);
       if (isOwner && m.role !== "owner") {
@@ -766,30 +787,31 @@ async function openDeckSheet(d) {
   if (isOwner) {
     const addTitle = document.createElement("p");
     addTitle.className = "sheet-section";
-    addTitle.textContent = "Inviter quelqu'un par e-mail";
-    const mail = document.createElement("input");
-    mail.type = "email";
-    mail.placeholder = "adresse@exemple.be";
+    addTitle.textContent = "Donner accès à quelqu'un";
+    const uname = document.createElement("input");
+    uname.type = "text";
+    uname.autocapitalize = "off";
+    uname.placeholder = "nom d'utilisateur";
     const addBtn = document.createElement("button");
     addBtn.className = "btn btn-primary btn-block";
     addBtn.textContent = "Donner accès";
     addBtn.onclick = async () => {
-      const email = mail.value.trim();
-      if (!email) return;
+      const username = uname.value.trim();
+      if (!username) return;
       addBtn.disabled = true;
-      const { data, error } = await sb.rpc("add_member_by_email", { d: d.id, member_email: email });
+      const { data, error } = await sb.rpc("add_member_by_email", { d: d.id, member_email: usernameToEmail(username) });
       addBtn.disabled = false;
       if (error) return toast("Invitation impossible");
-      if (data === "no_account") return toast("Aucun compte avec cet e-mail : demandez-lui de s'inscrire d'abord");
+      if (data === "no_account") return toast(`« ${username} » n'a pas encore d'accès : créez-le d'abord dans Admin`);
       if (data === "not_owner") return toast("Seul le propriétaire peut inviter");
-      mail.value = "";
+      uname.value = "";
       d.is_shared = true;
       renderDeckList(); renderDeckHeader();
       await loadMembers();
       toast("Accès accordé");
     };
-    mail.onkeydown = (e) => { if (e.key === "Enter") addBtn.click(); };
-    body.append(addTitle, mail, addBtn);
+    uname.onkeydown = (e) => { if (e.key === "Enter") addBtn.click(); };
+    body.append(addTitle, uname, addBtn);
   }
 
   const sep = document.createElement("p");
@@ -829,13 +851,13 @@ $("btn-account").onclick = () => {
 
   const l1 = document.createElement("p");
   l1.className = "sheet-section";
-  l1.textContent = `Connecté avec ${me.email}`;
+  l1.textContent = "Nom affiché (le nom utilisé pour se connecter ne change pas)";
   const nameInput = document.createElement("input");
   nameInput.type = "text";
   nameInput.value = me.display_name;
   const save = document.createElement("button");
   save.className = "btn btn-primary btn-block";
-  save.textContent = "Enregistrer le prénom";
+  save.textContent = "Enregistrer le nom affiché";
   save.onclick = async () => {
     const n = nameInput.value.trim();
     if (!n) return;
@@ -844,7 +866,7 @@ $("btn-account").onclick = () => {
     me.display_name = n;
     $("btn-account").textContent = initials(n);
     closeSheet();
-    toast("Prénom mis à jour");
+    toast("Nom mis à jour");
   };
 
   const out = document.createElement("button");
@@ -867,9 +889,73 @@ function showScreen(id) {
     .forEach((b) => b.classList.toggle("active", b.dataset.screen === id));
   if (id === "screen-words") renderWordList();
   if (id === "screen-decks") renderDeckList();
+  if (id === "screen-admin") renderAdmin();
 }
 document.querySelectorAll("nav.tabs button")
   .forEach((b) => { b.onclick = () => showScreen(b.dataset.screen); });
+
+/* ===================== Administration ===================== */
+
+$("btn-create-user").onclick = async () => {
+  const input = $("new-user-name");
+  const username = input.value.trim();
+  if (!username) return toast("Entrez un nom d'utilisateur");
+  if (slugify(username).length < 2) return toast("Nom d'utilisateur trop court");
+
+  const btn = $("btn-create-user");
+  btn.disabled = true;
+  btn.textContent = "Création…";
+
+  const { error } = await sbScratch.auth.signUp({
+    email: usernameToEmail(username),
+    password: usernameToPassword(username),
+    options: { data: { display_name: username } }
+  });
+  // Le client sbScratch ne conserve pas sa session (persistSession:
+  // false), donc ceci ne déconnecte jamais l'administrateur.
+  await sbScratch.auth.signOut();
+
+  btn.disabled = false;
+  btn.textContent = "Créer cet accès";
+
+  if (error) {
+    const m = (error.message || "").toLowerCase();
+    if (m.includes("already registered")) return toast(`« ${username} » existe déjà`);
+    return toast("Création impossible : " + error.message);
+  }
+  input.value = "";
+  toast(`Accès « ${username} » créé — communiquez-lui ce nom`);
+  renderAdmin();
+};
+$("new-user-name").addEventListener("keydown", (e) => { if (e.key === "Enter") $("btn-create-user").click(); });
+
+async function renderAdmin() {
+  const list = $("admin-user-list");
+  list.innerHTML = "Chargement…";
+  const { data, error } = await sb.rpc("list_all_users");
+  if (error) { list.textContent = "Impossible de charger la liste."; return; }
+
+  list.innerHTML = "";
+  for (const u of data || []) {
+    const row = document.createElement("div");
+    row.className = "row-item";
+    const txt = document.createElement("div");
+    txt.className = "txt";
+    const t1 = document.createElement("div");
+    t1.className = "t1";
+    t1.textContent = u.display_name + (u.user_id === me.id ? " (vous)" : "");
+    txt.appendChild(t1);
+    row.appendChild(txt);
+    if (u.is_admin) {
+      const tag = document.createElement("span");
+      tag.className = "tag shared";
+      tag.textContent = "Admin";
+      row.appendChild(tag);
+    }
+    list.appendChild(row);
+  }
+  if (!data || !data.length) list.innerHTML = '<p class="empty-note">Aucun compte pour l\'instant.</p>';
+}
 
 /* ===================== Démarrage ===================== */
 
@@ -881,6 +967,7 @@ async function start() {
   $("boot").hidden = true;
   $("app").hidden = false;
   $("btn-account").textContent = initials(me.display_name);
+  $("tab-admin").hidden = !me.is_admin;
 
   await loadDecks();
   renderDeckHeader();

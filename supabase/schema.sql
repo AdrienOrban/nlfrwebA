@@ -10,6 +10,7 @@ create table if not exists public.profiles (
   id           uuid primary key references auth.users on delete cascade,
   email        text,
   display_name text,
+  is_admin     boolean not null default false,
   created_at   timestamptz not null default now()
 );
 
@@ -51,6 +52,10 @@ create table if not exists public.progress (
   primary key (user_id, word_id)
 );
 
+-- Si vous aviez déjà exécuté une version précédente de ce script, cette
+-- ligne ajoute la colonne manquante sans rien casser.
+alter table public.profiles add column if not exists is_admin boolean not null default false;
+
 create index if not exists words_deck_idx        on public.words (deck_id);
 create index if not exists deck_members_user_idx on public.deck_members (user_id);
 
@@ -86,19 +91,25 @@ $$;
 
 -- ---------- 3. Déclencheurs automatiques ----------
 
--- À l'inscription, créer le profil.
+-- À l'inscription, créer le profil. La toute première personne à
+-- s'inscrire sur une base neuve devient automatiquement administratrice
+-- (aucune manipulation SQL supplémentaire à faire) ; les suivantes non.
 create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
 security definer
 set search_path = public
 as $$
+declare
+  is_first boolean;
 begin
-  insert into public.profiles (id, email, display_name)
+  select not exists (select 1 from public.profiles) into is_first;
+  insert into public.profiles (id, email, display_name, is_admin)
   values (
     new.id,
     new.email,
-    coalesce(new.raw_user_meta_data->>'display_name', split_part(new.email, '@', 1))
+    coalesce(new.raw_user_meta_data->>'display_name', split_part(new.email, '@', 1)),
+    is_first
   )
   on conflict (id) do nothing;
   return new;
@@ -129,6 +140,43 @@ drop trigger if exists on_deck_created on public.decks;
 create trigger on_deck_created
   after insert on public.decks
   for each row execute function public.handle_new_deck();
+
+-- Vrai uniquement s'il n'existe encore aucun compte : sert à savoir si
+-- le formulaire "créer le compte administrateur" doit s'afficher.
+create or replace function public.is_bootstrap_needed()
+returns boolean
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select not exists (select 1 from public.profiles);
+$$;
+
+create or replace function public.is_admin()
+returns boolean
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select coalesce((select is_admin from public.profiles where id = auth.uid()), false);
+$$;
+
+-- Liste de tous les comptes, réservée à l'administrateur (pour le
+-- panneau d'administration du site).
+create or replace function public.list_all_users()
+returns table (user_id uuid, display_name text, is_admin boolean, created_at timestamptz)
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select id, display_name, is_admin, created_at
+  from public.profiles
+  where public.is_admin()
+  order by created_at;
+$$;
 
 -- ---------- 4. Inviter quelqu'un par e-mail ----------
 -- Appelée depuis le site. Vérifie que l'appelant est bien propriétaire

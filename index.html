@@ -14,35 +14,24 @@
 <!-- ============ Écran de chargement ============ -->
 <div id="boot" class="boot">Chargement…</div>
 
-<!-- ============ Connexion / inscription ============ -->
+<!-- ============ Accès ============ -->
 <div id="auth" class="auth" hidden>
   <div class="auth-card">
     <h1 class="auth-title">NL ⇄ FR</h1>
     <p class="auth-sub">Cartes de vocabulaire néerlandais-français.</p>
 
-    <div class="seg">
-      <button type="button" class="seg-btn active" data-mode="login">Se connecter</button>
-      <button type="button" class="seg-btn" data-mode="signup">Créer un compte</button>
-    </div>
-
-    <label class="field" id="field-name" hidden>
-      <span>Prénom</span>
-      <input type="text" id="auth-name" autocomplete="given-name" placeholder="Camille">
-    </label>
-
     <label class="field">
-      <span>E-mail</span>
-      <input type="email" id="auth-email" autocomplete="email" placeholder="vous@exemple.be">
-    </label>
-
-    <label class="field">
-      <span>Mot de passe</span>
-      <input type="password" id="auth-password" autocomplete="current-password" placeholder="6 caractères minimum">
+      <span>Nom d'utilisateur</span>
+      <input type="text" id="auth-username" autocomplete="username" placeholder="camille" autocapitalize="off">
     </label>
 
     <p class="auth-error" id="auth-error" hidden></p>
+    <p class="auth-bootstrap" id="auth-bootstrap" hidden>
+      Aucun accès n'existe encore sur ce site : la première personne qui
+      entre un nom d'utilisateur ici en devient l'administratrice.
+    </p>
 
-    <button class="btn btn-primary btn-block" id="auth-submit">Se connecter</button>
+    <button class="btn btn-primary btn-block" id="auth-submit">Accéder</button>
   </div>
 </div>
 
@@ -116,12 +105,30 @@
       </div>
     </section>
 
+    <!-- ---- Administration (uniquement pour l'administrateur) ---- -->
+    <section id="screen-admin" class="screen">
+      <div class="panel" style="margin-top:0; padding-top:0; border-top:none;">
+        <h2 class="panel-title">Créer un accès</h2>
+        <p class="note" style="margin:0 0 9px;">
+          Choisissez un nom d'utilisateur pour une personne : il suffit
+          ensuite de le lui communiquer, elle n'a rien d'autre à retenir
+          ni à créer elle-même.
+        </p>
+        <input type="text" id="new-user-name" placeholder="ex. camille" autocapitalize="off">
+        <button class="btn btn-primary btn-block" id="btn-create-user">Créer cet accès</button>
+      </div>
+
+      <p class="sheet-section" style="margin-top:16px;">Comptes existants</p>
+      <div class="scroll-list" id="admin-user-list"></div>
+    </section>
+
   </main>
 
   <nav class="tabs">
     <button class="active" data-screen="screen-cards">Cartes</button>
     <button data-screen="screen-words">Mots</button>
     <button data-screen="screen-decks">Listes</button>
+    <button data-screen="screen-admin" id="tab-admin" hidden>Admin</button>
   </nav>
 </div>
 
